@@ -5,16 +5,14 @@ import urlparse
 
 def parse_db_url(url):
     url_parts = urlparse.urlparse(url)
-    connection = {'threadlocals': True}
+    # connection = {'threadlocals': True}
+    connection = {}
 
-    if url_parts.hostname and not url_parts.path:
-        connection['name'] = url_parts.hostname
-    else:
-        connection['name'] = url_parts.path[1:]
-        connection['host'] = url_parts.hostname
-        connection['port'] = url_parts.port
-        connection['user'] = url_parts.username
-        connection['password'] = url_parts.password
+    connection['name'] = os.environ.get('REDASH_CONNECTION_STRING', 'data')
+    connection['host'] = url_parts.hostname
+    connection['port'] = url_parts.port
+    connection['user'] = url_parts.username
+    connection['password'] = url_parts.password
 
     return connection
 
