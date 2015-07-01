@@ -1,33 +1,43 @@
-#!/bin/bash
+FROM ubuntu:14.04
 
-REDASH_BASE_PATH=/opt/redash
-FILES_BASE_URL=https://raw.githubusercontent.com/EverythingMe/redash/docs_setup/setup/files/
+RUN apt-get update
+RUN apt-get install -y wget nginx build-essential pwgen \
+    python-pip python-dev \
+    postgresql-9.3 postgresql-server-dev-9.3 \
+    redis-server \
+    nginx
 
-# Verify running as root:
-if [ "$(id -u)" != "0" ]; then
-    if [ $# -ne 0 ]; then
-        echo "Failed running with sudo. Exiting." 1>&2
-        exit 1
-    fi
-    echo "This script must be run as root. Trying to run with sudo."
-    sudo bash $0 --with-sudo
-    exit 0
-fi
+# Setup supervisord + sysv init startup script
+RUN sudo -u redash mkdir -p /opt/redash/supervisord
+RUN pip install supervisor==3.1.2 # TODO: move to requirements.txt
 
-# Base packages
-apt-get update
-apt-get install -y python-pip python-dev nginx curl build-essential pwgen wget
+# BigQuery dependencies:
+RUN apt-get install -y libffi-dev libssl-dev
+RUN pip install google-api-python-client==1.2 pyOpenSSL==0.14 oauth2client==1.2
 
-# redash user
-# TODO: check user doesn't exist yet?
-adduser --system --no-create-home --disabled-login --gecos "" redash
+# MySQL dependencies:
+RUN apt-get install -y libmysqlclient-dev
+RUN pip install MySQL-python==1.2.5
 
-# PostgreSQL
+# Mongo dependencies:
+RUN pip install pymongo==2.7.2
 
-wget $FILES_BASE_URL"postgres_apt.sh" -O /tmp/postgres_apt.sh
-bash /tmp/postgres_apt.sh
-apt-get update
-apt-get -y install postgresql-9.3 postgresql-server-dev-9.3
+ADD . /redash
+
+ENV REDIS_PORT=6379
+ENV REDIS_CONFIG_FILE="/etc/redis/$REDIS_PORT.conf"
+ENV REDIS_LOG_FILE="/var/log/redis_$REDIS_PORT.log"
+ENV REDIS_DATA_DIR="/var/lib/redis/$REDIS_PORT"
+
+ENV mkdir -p `dirname "$REDIS_CONFIG_FILE"` || die "Could not create redis config directory"
+ENV mkdir -p `dirname "$REDIS_LOG_FILE"` || die "Could not create redis log dir"
+ENV mkdir -p "$REDIS_DATA_DIR" || die "Could not create redis data directory"
+
+ENV wget -O /etc/init.d/redis_6379 $FILES_BASE_URL"redis_init"
+ENV wget -O $REDIS_CONFIG_FILE $FILES_BASE_URL"redis.conf"
+
+
+RUN adduser --system --no-create-home --disabled-login --gecos "" redash
 
 add_service() {
     service_name=$1
@@ -50,52 +60,16 @@ add_service() {
     $service_command start
 }
 
-# Redis
-redis_available=0
-redis-cli --version || redis_available=$?
-if [ $redis_available -ne 0 ]; then
-    wget http://download.redis.io/releases/redis-2.8.17.tar.gz
-    tar xzf redis-2.8.17.tar.gz
-    rm redis-2.8.17.tar.gz
-    cd redis-2.8.17
-    make
-    make install
-
-    # Setup process init & configuration
-
-    REDIS_PORT=6379
-    REDIS_CONFIG_FILE="/etc/redis/$REDIS_PORT.conf"
-    REDIS_LOG_FILE="/var/log/redis_$REDIS_PORT.log"
-    REDIS_DATA_DIR="/var/lib/redis/$REDIS_PORT"
-
-    mkdir -p `dirname "$REDIS_CONFIG_FILE"` || die "Could not create redis config directory"
-    mkdir -p `dirname "$REDIS_LOG_FILE"` || die "Could not create redis log dir"
-    mkdir -p "$REDIS_DATA_DIR" || die "Could not create redis data directory"
-
-    wget -O /etc/init.d/redis_6379 $FILES_BASE_URL"redis_init"
-    wget -O $REDIS_CONFIG_FILE $FILES_BASE_URL"redis.conf"
-
-    add_service "redis_$REDIS_PORT"
-
-    cd ..
-    rm -rf redis-2.8.17
-fi
-
-# Directories
-if [ ! -d "$REDASH_BASE_PATH" ]; then
-    sudo mkdir /opt/redash
-    sudo chown redash /opt/redash
-    sudo -u redash mkdir /opt/redash/logs
-fi
+RUN mkdir /opt/redash
+RUN chown redash /opt/redash
+RUN -u redash mkdir /opt/redash/logs
 
 # Default config file
-if [ ! -f "/opt/redash/.env" ]; then
-    sudo -u redash wget $FILES_BASE_URL"env" -O /opt/redash/.env
-fi
+RUN -u redash wget $FILES_BASE_URL"env" -O /opt/redash/.env
 
 # Install latest version
 # REDASH_VERSION=${REDASH_VERSION-0.4.0.b589}
-# modified by @fedex1 3/15/2015 seems to be the latest version at this point in time. 
+# modified by @fedex1 3/15/2015 seems to be the latest version at this point in time.
 REDASH_VERSION=${REDASH_VERSION-0.6.0.b722}
 LATEST_URL="https://github.com/EverythingMe/redash/releases/download/v${REDASH_VERSION/.b/%2Bb}/redash.$REDASH_VERSION.tar.gz"
 VERSION_DIR="/opt/redash/redash.$REDASH_VERSION"
@@ -149,20 +123,6 @@ if [ $pg_user_exists -ne 0 ]; then
     sudo -u redash bin/run ./manage.py ds new -n "re:dash metadata" -t "pg" -o "{\"user\": \"redash_reader\", \"password\": \"$REDASH_READER_PASSWORD\", \"host\": \"localhost\", \"dbname\": \"redash\"}"
 fi
 
-# BigQuery dependencies:
-apt-get install -y libffi-dev libssl-dev
-pip install google-api-python-client==1.2 pyOpenSSL==0.14 oauth2client==1.2
-
-# MySQL dependencies:
-apt-get install -y libmysqlclient-dev
-pip install MySQL-python==1.2.5
-
-# Mongo dependencies:
-pip install pymongo==2.7.2
-
-# Setup supervisord + sysv init startup script
-sudo -u redash mkdir -p /opt/redash/supervisord
-pip install supervisor==3.1.2 # TODO: move to requirements.txt
 
 # Get supervisord startup script
 sudo -u redash wget -O /opt/redash/supervisord/supervisord.conf $FILES_BASE_URL"supervisord.conf"
@@ -175,3 +135,7 @@ rm /etc/nginx/sites-enabled/default
 wget -O /etc/nginx/sites-available/redash $FILES_BASE_URL"nginx_redash_site"
 ln -nfs /etc/nginx/sites-available/redash /etc/nginx/sites-enabled/redash
 service nginx restart
+
+ENTRYPOINT redis && redash_supervisord
+
+CMD nginx

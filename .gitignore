@@ -18,3 +18,4 @@ redash/dump.rdb
 venv
 
 dump.rdb
+.elasticbeanstalk

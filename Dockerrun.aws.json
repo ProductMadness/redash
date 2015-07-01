@@ -1,0 +1,15 @@
+{
+  "AWSEBDockerrunVersion": "1",
+  "Volumes": [
+    {
+      "ContainerDirectory": "/var/dagobah",
+      "HostDirectory": "/var/dagobah"
+    }
+  ],
+  "Ports": [
+    {
+      "ContainerPort": "80"
+    }
+  ],
+  "Logging": "/var/core.txt"
+}
