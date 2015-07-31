@@ -1,9 +1,9 @@
-REDASH_CONNECTION_ADAPTER=pg
-REDASH_CONNECTION_STRING='redash'
-REDASH_STATIC_ASSETS_PATH='/opt/redash/current/rd_ui/app/'
-REDASH_GOOGLE_APPS_DOMAIN='productmadness.com'
-REDASH_ADMINS=
-REDASH_WORKERS_COUNT=2
-REDASH_COOKIE_SECRET='cookies_are_very_important_to_be_secret'
-REDASH_DATABASE_URL='postgresql://redash:r3Dash_rds@redash.cnhfykwbnukf.us-east-1.rds.amazonaws.com:5432'
-REDASH_LOG_LEVEL='INFO'
+export REDASH_CONNECTION_ADAPTER=pg
+export REDASH_CONNECTION_STRING="dbname=redash"
+export REDASH_STATIC_ASSETS_PATH="../rd_ui/dist/"
+export REDASH_LOG_LEVEL="INFO"
+export REDASH_WORKERS_COUNT=6
+export REDASH_REDIS_URL=redis://localhost:6379/1
+export REDASH_DATABASE_URL="postgresql://redash"
+export REDASH_COOKIE_SECRET=veryverysecret
+export REDASH_GOOGLE_APPS_DOMAIN=
